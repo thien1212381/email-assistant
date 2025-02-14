@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, String, DateTime, Text, ForeignKey, Boolean, JSON
+from sqlalchemy import create_engine, Column, String, DateTime, Text, ForeignKey, Boolean, JSON, true
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 import os
@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 from datetime import time
 from enum import Enum
 import uuid
+import asyncio
 
 Base = declarative_base()
 
@@ -20,14 +21,18 @@ class EmailCategory(str, Enum):
 class EmailModel(Base):
     __tablename__ = 'emails'
     
-    id = Column(String, primary_key=True)
+    id = Column(String, primary_key=True)  # This will be the email ID from provider
     subject = Column(String)
     sender = Column(String)
-    recipients = Column(String)  # Stored as string representation of list
-    content = Column(String)
+    recipients = Column(String)  # JSON string
+    content = Column(Text)
     timestamp = Column(DateTime, default=datetime.now)
     category = Column(String)
     is_read = Column(Boolean, default=False)
+    thread_id = Column(String, nullable=True)
+    labels = Column(String, nullable=True)  # JSON string
+    provider_type = Column(String, nullable=True)
+    last_synced = Column(DateTime, default=datetime.now)
     
     # Relationships
     meetings = relationship("MeetingModel", back_populates="email")
@@ -74,7 +79,7 @@ class Database:
     def create_tables(self) -> None:
         """Create all database tables."""
         Base.metadata.create_all(self.engine)
-        
+    
     def save_email(self, email_data: Dict) -> None:
         """Save an email to the database."""
         with self.Session() as session:
@@ -110,6 +115,57 @@ class Database:
         try:
             return session.query(MessageModel)\
                 .order_by(MessageModel.timestamp).all()
+        finally:
+            session.close()
+
+    async def sync_email(self, email: Dict) -> bool:
+        session = self.Session()
+        try:    
+            existing = session.query(EmailModel).filter_by(id=email['id']).first()
+            if existing:
+                # Update existing email
+                for key, value in email.items():
+                    if key in ['recipients', 'labels'] and isinstance(value, list):
+                        value = json.dumps(value)
+                    setattr(existing, key, value)
+                existing.last_synced = datetime.now()
+                return False
+            else:
+                # Create new email
+                if 'recipients' in email and isinstance(email['recipients'], list):
+                    email['recipients'] = json.dumps(email['recipients'])
+                if 'labels' in email and isinstance(email['labels'], list):
+                    email['labels'] = json.dumps(email['labels'])
+                emailModel = EmailModel(**email)
+                session.add(emailModel)
+                session.commit()
+                return True
+        finally:
+            session.close()
+
+    async def sync_emails(self, emails: List[Dict]) -> None:
+        """Sync emails from provider to local database."""
+        session = self.Session()
+        try:
+            for email_data in emails:
+                existing = session.query(EmailModel).filter_by(id=email_data['id']).first()
+                if existing:
+                    # Update existing email
+                    for key, value in email_data.items():
+                        if key in ['recipients', 'labels'] and isinstance(value, list):
+                            value = json.dumps(value)
+                        setattr(existing, key, value)
+                    existing.last_synced = datetime.now()
+                else:
+                    # Create new email
+                    if 'recipients' in email_data and isinstance(email_data['recipients'], list):
+                        email_data['recipients'] = json.dumps(email_data['recipients'])
+                    if 'labels' in email_data and isinstance(email_data['labels'], list):
+                        email_data['labels'] = json.dumps(email_data['labels'])
+                    email = EmailModel(**email_data)
+                    session.add(email)
+            
+            session.commit()
         finally:
             session.close()
 

@@ -84,6 +84,147 @@ CREATE TABLE messages (
 )
 ```
 
+## Gmail Integration
+
+The application integrates with Gmail using OAuth2 authentication to access and manage your emails. Here's how it works:
+
+### Authentication Setup
+
+1. Create a Google Cloud Project:
+   - Go to [Google Cloud Console](https://console.cloud.google.com)
+   - Create a new project or select an existing one
+   - Enable the Gmail API for your project
+   - Configure the OAuth consent screen
+   - Create OAuth 2.0 credentials (Desktop application)
+   - Download the credentials and save as `config/credentials.json`
+
+2. Required Scopes:
+   ```
+   https://www.googleapis.com/auth/gmail.readonly
+   https://www.googleapis.com/auth/gmail.send
+   https://www.googleapis.com/auth/gmail.modify
+   https://www.googleapis.com/auth/gmail.labels
+   ```
+
+### Email Processor
+
+The Email Processor is responsible for:
+
+1. **Email Syncing**:
+   - Periodically fetches new emails from Gmail
+   - Configurable sync interval and batch size
+   - Focuses on unread emails by default
+
+2. **Email Processing**:
+   - Uses LLM to classify emails into categories:
+     - MEETING: Emails about meetings and scheduling
+     - IMPORTANT: High-priority emails
+     - FOLLOW_UP: Emails needing response
+     - SPAM: Unwanted emails
+     - UPDATES: System notifications
+     - SOCIAL: Social network communications
+     - PROMOTIONS: Marketing content
+   - Adds Gmail labels based on categories (prefixed with "G.")
+   - Extracts meeting information when relevant
+   - Stores processed emails in local database
+
+3. **Meeting Detection**:
+   - Automatically detects meeting invites
+   - Extracts key information:
+     - Title
+     - Date and time
+     - Duration
+     - Location/link
+     - Attendees
+   - Schedules reminders for meetings
+   - Checks for scheduling conflicts
+
+### Usage Example
+
+```python
+from app.gmail_provider import GmailProvider
+from app.database import Database
+from app.agent import EmailAgent
+from app.llm_provider import get_llm_provider
+from app.email_processor import EmailProcessor
+
+async def main():
+    # Initialize components
+    db = Database()
+    llm = get_llm_provider("openai")
+    agent = EmailAgent(db, llm)
+    
+    # Initialize Gmail provider
+    gmail = GmailProvider(
+        credentials_path="config/credentials.json",
+        token_path="config/token.pickle"
+    )
+    
+    # Create email processor
+    processor = EmailProcessor(
+        email_provider=gmail,
+        database=db,
+        agent=agent,
+        sync_interval=300,  # 5 minutes
+        max_emails_per_sync=15
+    )
+    
+    # Start processing
+    await processor.start()
+```
+
+### Configuration
+
+The email processor can be configured through environment variables:
+
+```env
+EMAIL_PROVIDER=gmail
+EMAIL_SYNC_INTERVAL_MINUTES=5
+EMAIL_MAX_EMAILS_PER_SYNC=15
+OPENAI_API_KEY=your_api_key
+```
+
+### Gmail Labels
+
+The processor automatically creates and manages Gmail labels:
+
+- G.MEETING
+- G.IMPORTANT
+- G.FOLLOW_UP
+- G.SPAM
+- G.UPDATES
+- G.SOCIAL
+- G.PROMOTIONS
+
+The "G." prefix is used to avoid conflicts with Gmail's built-in labels.
+
+### Database Integration
+
+Processed emails are stored in SQLite with the following schema:
+
+```sql
+CREATE TABLE emails (
+    id TEXT PRIMARY KEY,
+    subject TEXT,
+    sender TEXT,
+    recipients TEXT,  -- JSON string
+    content TEXT,
+    timestamp DATETIME,
+    thread_id TEXT,
+    category TEXT,
+    is_read BOOLEAN,
+    labels TEXT,      -- JSON string
+    provider_type TEXT,
+    last_synced DATETIME
+)
+```
+
+This allows for:
+- Local email search and filtering
+- Offline access to email content
+- Quick retrieval of categorized emails
+- Meeting information tracking
+
 ## Setup and Installation
 
 1. Clone the repository:

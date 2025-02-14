@@ -2,12 +2,13 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 import uuid
 
-from .database import Database, EmailModel
+from .database import Database, EmailCategory
 from .llm_provider import LLMProvider
 from .meeting_detector import MeetingDetector
 from .notification_system import NotificationSystem
 import re
 from sqlalchemy import text
+import random
 
 
 class EmailAgent:
@@ -89,41 +90,37 @@ class EmailAgent:
 
     async def process_email(self, email_data: dict) -> str:
         """Process an incoming email."""
-        # Ensure email has an ID
-        if 'id' not in email_data:
-            email_data['id'] = str(uuid.uuid4())
-            
-        # Save email to database
-        self.db.save_email(email_data)
-        
+
         # Classify email
         category = await self.llm.classify_email(
             subject=email_data['subject'],
             content=email_data['content']
         )
         
-        # Check for meeting information
-        meeting_info = await self.meeting_detector.detect_meeting(email_data)
-        if meeting_info:
-            # Schedule meeting reminder
-            await self.notification_system.schedule_meeting_reminder(meeting_info)
-            
-            # Check for conflicts
-            conflicts = self.meeting_detector.check_conflicts(meeting_info['datetime'])
-            if conflicts:
-                # Generate alternative times
-                suggestions = self.meeting_detector.generate_alternative_times(
-                    meeting_info['datetime'],
-                    conflicts
-                )
+        if category == "Meetings":
+            # Check for meeting information
+            meeting_info = await self.meeting_detector.detect_meeting(email_data)
+            if meeting_info:
+                # Schedule meeting reminder
+                await self.notification_system.schedule_meeting_reminder(meeting_info)
                 
-                # Notify about conflicts
-                await self.notification_system.notify_meeting_conflict(
-                    meeting_info,
-                    conflicts,
-                    suggestions
-                )
+                # Check for conflicts
+                conflicts = self.meeting_detector.check_conflicts(meeting_info['datetime'])
+                if conflicts:
+                    # Generate alternative times
+                    suggestions = self.meeting_detector.generate_alternative_times(
+                        meeting_info['datetime'],
+                        conflicts
+                    )
+                    
+                    # Notify about conflicts
+                    await self.notification_system.notify_meeting_conflict(
+                        meeting_info,
+                        conflicts,
+                        suggestions
+                    )
     
+        email_data['category'] = category
         self.db.save_email(email_data)
         
         return category

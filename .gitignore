@@ -45,3 +45,6 @@ data/*
 # OS
 .DS_Store
 Thumbs.db
+
+config/credentials.json
+config/token.pickle

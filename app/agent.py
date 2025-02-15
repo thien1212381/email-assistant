@@ -67,15 +67,15 @@ class EmailAgent:
 
     async def classify_email(self, email_data: dict) -> str:
         return await self.llm.classify_email(
-            subject=email_data['subject'],
-            content=email_data['content']
+            subject=email_data['subject'][:50],
+            content=email_data['content'][:50]
         )
 
     async def generate_summary_emails(self, emails: List[Dict]) -> str:
         """Generate a summary of emails."""
-        prompt = f"Generate a summary of the following emails:\n\n"
+        prompt = f"Generate a summary of the following emails:\n"
         for email in emails:
-            prompt += f"Subject: {email['subject']}\nSender: {email['sender']}\nContent: {email['content']}\n\n"
+            prompt += f"Subject: {email['subject'][:50]}\nSender: {email['sender']}\nContent: {email['content'][:50]}\n\n"
         return await self.llm.generate_response(prompt)
 
     async def get_meeting_info(self, email_data: dict) -> dict:
@@ -85,7 +85,7 @@ class EmailAgent:
     async def generate_auto_reply(self, email_data: dict) -> str:
         """Generate an auto-reply based on email content."""
         prompt = f"Generate a professional reply based on email content.:\n\n"
-        prompt += f"Subject: {email_data['subject']}\nSender: {email_data['sender']}\nContent: {email_data['content']}\n\n"
+        prompt += f"Subject: {email_data['subject'][:50]}\nSender: {email_data['sender']}\nContent: {email_data['content'][:50]}\n\n"
         return await self.llm.generate_response(prompt)
 
     async def process_email(self, email_data: dict) -> str:
@@ -93,8 +93,8 @@ class EmailAgent:
 
         # Classify email
         category = await self.llm.classify_email(
-            subject=email_data['subject'],
-            content=email_data['content']
+            subject=email_data['subject'][:50],
+            content=email_data['content'][:50]
         )
         
         if category == "Meetings":

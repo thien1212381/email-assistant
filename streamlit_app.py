@@ -113,7 +113,8 @@ def main():
             is_valid_email_data = len(data) > 0 and "content" in data[0].keys() and "sender" in data[0].keys() and "subject" in data[0].keys()
             if is_valid_email_data:
                 if len(data) > 1:
-                    response = asyncio.run(generate_summary_emails(data))
+                    limit_emails = data[:3]
+                    response = asyncio.run(generate_summary_emails(limit_emails))
                     save_message("assistant", f"Summary emails: {response}")
                     display_chat_message("assistant", f"Summary emails: {response}", "🤖")
                 

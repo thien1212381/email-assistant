@@ -89,7 +89,7 @@ JSON:""")
 
     async def generate_reply(self, email_thread: List[Dict]) -> str:
         thread_content = "\n\n".join([
-            f"From: {email['sender']}\nSubject: {email['subject']}\nContent: {email['content']}"
+            f"From: {email['sender']}\nSubject: {email['subject'][:50]}\nContent: {email['content'][:50]}"
             for email in email_thread
         ])
         
@@ -104,7 +104,7 @@ JSON:""")
     async def generate_daily_summary(self, emails: List[Dict]) -> dict:
         """Generate a comprehensive summary of multiple emails."""
         email_summaries = "\n\n".join([
-            f"Email {i+1}:\nFrom: {email['sender']}\nSubject: {email['subject']}\nCategory: {email['category']}"
+            f"Email {i+1}:\nFrom: {email['sender']}\nSubject: {email['subject'][:50]}\nCategory: {email['category']}"
             for i, email in enumerate(emails)
         ])
         

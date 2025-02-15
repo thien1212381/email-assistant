@@ -14,8 +14,8 @@ class MeetingDetector:
     async def detect_meeting(self, email_data: dict) -> Optional[Dict]:
         """Detect if an email contains meeting information."""
         meeting_info = await self.llm.extract_meeting_info(
-            subject=email_data['subject'],
-            content=email_data['content']
+            subject=email_data['subject'][:50],
+            content=email_data['content'][:50]
         )
         
         if not meeting_info:

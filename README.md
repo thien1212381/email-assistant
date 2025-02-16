@@ -299,6 +299,32 @@ For each email or thread, the system can generate:
 - Action items
 - Relevant context from conversation history
 
+## TODO
+
+### 1. Morning Brief Enhancement
+- [ ] Implement dedicated morning brief functionality on chat UI
+  - [ ] Daily email summary categorized by priority
+  - [ ] Today's meeting schedule
+  - [ ] Important follow-ups and pending responses
+  - [ ] Key metrics and statistics (email volume, response times)
+  - [ ] Customizable brief templates
+
+### 2. Meeting Management Improvements on chat UI and notifications
+- [ ] Smart meeting reminders with configurable timing
+- [ ] Meeting conflict detection and resolution
+- [ ] Suggest alternative meeting times based on calendar availability
+
+### 3. Video Demo
+
+### 4. LLM Context and Flow Improvements
+- [ ] Enhanced conversation context management
+  - [ ] Multi-turn conversation support
+  - [ ] Context-aware response generation
+  - [ ] Action chaining (e.g., classify → summarize → schedule)
+  - [ ] User preference learning
+  - [ ] Conversation history integration
+  - [ ] Improved prompt engineering for better context retention
+
 ## Contributing
 
 1. Fork the repository

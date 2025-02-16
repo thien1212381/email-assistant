@@ -6,6 +6,7 @@ from .database import Database, EmailCategory
 from .llm_provider import LLMProvider
 from .meeting_detector import MeetingDetector
 from .notification_system import NotificationSystem
+from .utils import prepare_email_for_prompt, clean_email_content
 import re
 from sqlalchemy import text
 import random
@@ -66,59 +67,58 @@ class EmailAgent:
             return result_dict
 
     async def classify_email(self, email_data: dict) -> str:
+        """Classify email into categories using LLM."""
+        cleaned_data = prepare_email_for_prompt(email_data)
         return await self.llm.classify_email(
-            subject=email_data['subject'][:50],
-            content=email_data['content'][:50]
+            subject=cleaned_data['subject'],
+            content=cleaned_data['content']
         )
 
     async def generate_summary_emails(self, emails: List[Dict]) -> str:
         """Generate a summary of emails."""
         prompt = f"Generate a summary of the following emails:\n"
         for email in emails:
-            prompt += f"Subject: {email['subject'][:50]}\nSender: {email['sender']}\nContent: {email['content'][:50]}\n\n"
+            cleaned_data = prepare_email_for_prompt(email)
+            prompt += (
+                f"Subject: {cleaned_data['subject']}\n"
+                f"Sender: {cleaned_data['sender']}\n"
+                f"Content: {cleaned_data['content']}\n\n"
+            )
         return await self.llm.generate_response(prompt)
 
     async def get_meeting_info(self, email_data: dict) -> dict:
         """Extract meeting information from email."""
-        return await self.meeting_detector.detect_meeting(email_data)
+        cleaned_data = prepare_email_for_prompt(email_data)
+        return await self.meeting_detector.detect_meeting(cleaned_data)
 
     async def generate_auto_reply(self, email_data: dict) -> str:
         """Generate an auto-reply based on email content."""
-        prompt = f"Generate a professional reply based on email content.:\n\n"
-        prompt += f"Subject: {email_data['subject'][:50]}\nSender: {email_data['sender']}\nContent: {email_data['content'][:50]}\n\n"
+        cleaned_data = prepare_email_for_prompt(email_data)
+        prompt = (
+            f"Generate a professional reply based on email content:\n\n"
+            f"Subject: {cleaned_data['subject']}\n"
+            f"Sender: {cleaned_data['sender']}\n"
+            f"Content: {cleaned_data['content']}\n\n"
+        )
         return await self.llm.generate_response(prompt)
 
     async def process_email(self, email_data: dict) -> str:
-        """Process an incoming email."""
-
+        """Process an incoming email."""       
+        # Clean and normalize email data
+        cleaned_data = prepare_email_for_prompt(email_data)
+        
         # Classify email
         category = await self.llm.classify_email(
-            subject=email_data['subject'][:50],
-            content=email_data['content'][:50]
+            subject=cleaned_data['subject'],
+            content=cleaned_data['content']
         )
         
         if category == "Meetings":
             # Check for meeting information
-            meeting_info = await self.meeting_detector.detect_meeting(email_data)
+            meeting_info = await self.meeting_detector.detect_meeting(cleaned_data)
             if meeting_info:
                 # Schedule meeting reminder
                 await self.notification_system.schedule_meeting_reminder(meeting_info)
-                
-                # Check for conflicts
-                conflicts = self.meeting_detector.check_conflicts(meeting_info['datetime'])
-                if conflicts:
-                    # Generate alternative times
-                    suggestions = self.meeting_detector.generate_alternative_times(
-                        meeting_info['datetime'],
-                        conflicts
-                    )
-                    
-                    # Notify about conflicts
-                    await self.notification_system.notify_meeting_conflict(
-                        meeting_info,
-                        conflicts,
-                        suggestions
-                    )
     
         email_data['category'] = category
         self.db.save_email(email_data)

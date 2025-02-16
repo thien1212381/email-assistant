@@ -92,7 +92,7 @@ class EmailProcessor:
         is_new = await self.db.sync_email(email_data)
         if is_new:
             category = await self.agent.process_email(email_data)
-            logger.info(f"Email category: {email_data['subject']} - {category}")
+            logger.info(f"Email category: {email_data['id']} - {email_data['subject']} - {category}")
 
             await self.provider.add_label(email_data["id"], f"G.{category}") # add prefix G. for not conflict with gmail label.
 

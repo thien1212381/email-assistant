@@ -81,9 +81,13 @@ JSON:""")
         
         try:
             json_str = response.content.strip()
-            if json_str.startswith('```json'):
-                json_str = json_str[7:-3]
-            return json.loads(json_str)
+            print(json_str)
+            if json_str.__contains__('```json'):
+                matches = re.findall(r'```json\n(.*?)```', json_str, re.DOTALL)
+                if matches:
+                    json_block = matches[0].strip()
+                    return json.loads(json_block)
+            return None
         except:
             return None
 

@@ -167,13 +167,11 @@ class GmailProvider(EmailProvider):
             except HttpError:
                 # Label might already exist
                 labels = self.service.users().labels().list(userId='me').execute()
-                print(labels)
                 label_obj = next(
                     (l for l in labels['labels'] if l['name'].lower() == label.lower()),
                     None
                 )
             
-            print(label_obj)
             if label_obj:
                 self.service.users().messages().modify(
                     userId='me',

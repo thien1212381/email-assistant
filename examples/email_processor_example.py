@@ -32,7 +32,7 @@ async def main():
         database=db,
         agent=agent,
         sync_interval=300,  # 5 minutes
-        max_emails_per_sync=15
+        max_emails_per_sync=3
     )
     
     try:

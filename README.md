@@ -2,6 +2,8 @@
 
 An intelligent email assistant powered by LLMs that helps you manage, categorize, and interact with your emails through natural language queries.
 
+## Video Demo: [link here](https://drive.google.com/file/d/1HuF6Snn6Q8dPUfotKK7-pdJ6wW8doR4o/view?usp=sharing)
+
 ## Features
 
 - **Natural Language Queries**: Ask questions about your emails in plain English

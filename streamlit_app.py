@@ -27,6 +27,9 @@ def init_session_state():
     if 'is_init' not in st.session_state:
         st.session_state.is_init = False
 
+    if 'relative_emails' not in st.session_state:
+        st.session_state.relative_emails = []
+
 def display_chat_message(role: str, content: str, avatar: str = None):
     """Display a chat message with proper styling."""
     with st.chat_message(role, avatar=avatar):
@@ -44,9 +47,10 @@ def save_message(role: str, content: str):
     # Save to database
     db.add_message(role, content)
 
-async def get_assistant_response(prompt: str) -> str:
+async def get_assistant_response(prompt: str) -> dict:
     """Get response from assistant asynchronously."""
-    return await agent.handle_user_query(prompt)
+    relative_emails = st.session_state.relative_emails
+    return await agent.handle_user_query(prompt, relative_emails)
 
 async def generate_summary_emails(emails: List[Dict]) -> str:
     """Get all important and follow-up emails."""
@@ -284,42 +288,61 @@ def main():
         # Generate and save assistant response
         with st.spinner("Generating response..."):
             data = asyncio.run(get_assistant_response(prompt))
-            if len(data) == 0:
-                response = "No emails found."
-                save_message("assistant", response)
-                display_chat_message("assistant", response, "🤖")
-            else:
-                df = pd.DataFrame(data)
-                display_table_message("assistant", df, "🤖")
+            flow_category = data.get("flow_category")
+            match flow_category:
+                case "SqlQueryFlow":
+                    emails = data.get("emails")
+                    if len(emails) == 0:
+                        response = "No emails found."
+                        save_message("assistant", response)
+                        display_chat_message("assistant", response, "🤖")
+                    else:
+                        df = pd.DataFrame(emails)
+                        display_table_message("assistant", df, "🤖")
+                        st.session_state.relative_emails = emails
 
-            is_valid_email_data = len(data) > 0 and "content" in data[0].keys() and "sender" in data[0].keys() and "subject" in data[0].keys()
-            if is_valid_email_data:
-                if len(data) > 1:
-                    limit_emails = data[:5]
-                    response = asyncio.run(generate_summary_emails(limit_emails))
-                    save_message("assistant", f"Summary emails: {response}")
-                    display_chat_message("assistant", f"Summary emails: {response}", "🤖")
-                
-                if len(data) == 1:
-                    email = data[0]
-                    category = email['category'] # get email category
+                    is_valid_email_data = len(emails) > 0 and "content" in emails[0].keys() and "sender" in emails[0].keys() and "subject" in emails[0].keys()
+                    if is_valid_email_data:
+                        if len(emails) > 1:
+                            limit_emails = emails[:5]
+                            response = asyncio.run(generate_summary_emails(limit_emails))
+                            save_message("assistant", f"Summary emails: {response}")
+                            display_chat_message("assistant", f"Summary emails: {response}", "🤖")
+                        
+                        if len(emails) == 1:
+                            email = emails[0]
+                            category = email['category'] # get email category
 
-                    response = asyncio.run(generate_summary_emails([email]))
-                    save_message("assistant", f"Summary email:  \n {response}")
-                    display_chat_message("assistant", f"Summary email:  \n {response}", "🤖")
-                    
-                    if category == "Meetings":
-                        meeting_info = asyncio.run(get_meeting_info(email))
-                        if meeting_info:
-                            display_meeting_info(meeting_info)
-                        else:
-                            st.warning("No meeting information found in this email.")
-                        save_message("assistant", f"Meeting info:  \n {meeting_info}")
+                            response = asyncio.run(generate_summary_emails([email]))
+                            save_message("assistant", f"Summary email:  \n {response}")
+                            display_chat_message("assistant", f"Summary email:  \n {response}", "🤖")
+                            
+                            if category == "Meetings":
+                                meeting_info = asyncio.run(get_meeting_info(email))
+                                if meeting_info:
+                                    display_meeting_info(meeting_info)
+                                else:
+                                    st.warning("No meeting information found in this email.")
+                                save_message("assistant", f"Meeting info:  \n {meeting_info}")
 
-                    if category == "Important" or category == "Follow-Up":
-                        response = asyncio.run(generate_auto_reply(email))
-                        save_message("assistant", f"Suggestion reply:  \n {response}")
-                        display_chat_message("assistant", f"Suggestion reply:  \n {response}", "🤖")
+                            if category == "Important" or category == "Follow-Up":
+                                response = asyncio.run(generate_auto_reply(email))
+                                save_message("assistant", f"Suggestion reply:  \n {response}")
+                                display_chat_message("assistant", f"Suggestion reply:  \n {response}", "🤖")
+                    pass
+                case "MorningBriefFlow":
+                    morning_summary = data.get("summary")
+                    save_message("assistant", f"Morning summary:  \n {morning_summary}")
+                    display_chat_message("assistant", f"Morning summary:  \n {morning_summary}", "🤖")
+                    pass
+                case "ExecutionFlow":
+                    response = data.get("response")
+                    save_message("assistant", f"Follow up email:  \n {response}")
+                    display_chat_message("assistant", f"Follow up email:  \n {response}", "🤖")
+                    pass
+                case "Other":
+                    pass
+
 
 if __name__ == "__main__":
     main()

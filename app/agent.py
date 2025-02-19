@@ -19,38 +19,11 @@ class EmailAgent:
         self.meeting_detector = MeetingDetector(db, llm_provider)
         self.notification_system = NotificationSystem(db)
     
-    async def handle_user_query(self, nl_query: str) -> str:
-        """Convert natural language query to a SQLite query."""
-        
-        # Generate a prompt to convert natural language to SQL
-        prompt = f"Convert the following natural language query into a SQLite query.\n\nTable emails has schemas:\n"
-        
-        columns = [
-            { "name": "subject", "type": "String" },
-            { "name": "sender", "type": "String" },
-            { "name": "recipients", "type": "String" },
-            { "name": "content", "type": "String" },
-            { "name": "timestamp", "type": "DateTime" },
-            { "name": "category", "type": "Enum('Meetings','Important','Follow-Up','Spam')" },
-            { "name": "is_read", "type": "Boolean" },
-        ]
-        
-        prompt += '\n'.join([f"{col['name']} {col['type']}" for col in columns])
-        prompt += f"\n\nQuery: {nl_query}\n\n"
-    
-        # Call the LLM provider to generate a SQL query
-        result = await self.llm.generate_response(prompt)
-
-        # Extract the SQL block from the result
-        matches = re.findall(r'```sql\n(.*?)```', result, re.DOTALL)
-        if matches:
-            sql_block = matches[0].strip()
-        else:
-            return []
-            
-        # Execute the query on the database
+    async def _get_email_data(self, sql: str) -> List[Dict]:
+        """Fetch emails from the database based on the provided SQL query."""
+        print(sql)
         with self.db.Session() as session:
-            result = session.execute(text(sql_block))
+            result = session.execute(text(sql))
             rows = result.fetchall()
             columns = result.keys()
 
@@ -60,11 +33,32 @@ class EmailAgent:
             result_dict = [{col: val for col, val in zip(columns, row)} for row in rows]
             print(result_dict)
 
-            await self.llm.save_context(
-                input=f"{nl_query}",
-                output=",".join([f"{col}: {val}" for col, val in zip(columns, rows)])
-            )
             return result_dict
+
+    async def handle_user_query(self, nl_query: str, related_email_data: List[Dict]) -> str:
+        """Convert natural language query to a SQLite query."""
+
+        flow_category = await self.llm.classify_prompt(nl_query)
+        print(flow_category)
+
+        match flow_category:
+            case "SqlQueryFlow":
+                sql_block = await self.llm.handle_user_query(nl_query)
+
+                emails = await self._get_email_data(sql_block)
+                return { "flow_category": flow_category, "emails": emails }
+            case "MorningBriefFlow":
+                email_data = await self._get_email_data("SELECT * FROM emails")
+                cleaned_data = prepare_email_for_prompt(email_data)
+
+                morning_summary = await self.llm.generate_daily_summary(cleaned_data)
+                return { "flow_category": flow_category, "summary": morning_summary }
+            case "ExecutionFlow":
+                cleaned_data = prepare_email_for_prompt(related_email_data)
+                response = await self.llm.generate_response_follow_up_email(nl_query, cleaned_data)
+                return { "flow_category": flow_category, "response": response }
+            case "Other":
+                pass
 
     async def classify_email(self, email_data: dict) -> str:
         """Classify email into categories using LLM."""

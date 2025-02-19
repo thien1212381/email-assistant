@@ -33,6 +33,22 @@ class LLMProvider(ABC):
     def _init_llm(self) -> BaseChatModel:
         pass
         
+    async def classify_prompt(self, prompt: str) -> str:
+        messages = [
+            SystemMessage(content="""You are an AI assistant that classifies user queries into different categories. 
+Categories:
+1. SqlQueryFlow - If the user is asking for data retrieval emails in natural language (e.g., retrieving emails, meetings).
+2. ExecutionFlow - If the user wants to process, analyze, summarize, categorize, or take action on follow-up emails or meetings.
+3. MorningBriefFlow - If the query contains some words like: "Morning Brief", "Daily Brief", "Morning Summary", "Daily Summary", or "Daily Action Items".
+4. Other - If the query does not fit into the above categories.
+"""),
+                HumanMessage(content=f"""
+Classify the following query: {prompt}
+Response: The best flow category is:""")
+            ]
+        response = await self.llm.ainvoke(messages)
+        return response.content.strip()
+        
     async def classify_email(self, subject: str, content: str) -> str:
         messages = [
             SystemMessage(content="""You are an email classifier. Classify the email into one of these categories:
@@ -108,7 +124,7 @@ JSON:""")
     async def generate_daily_summary(self, emails: List[Dict]) -> dict:
         """Generate a comprehensive summary of multiple emails."""
         email_summaries = "\n\n".join([
-            f"Email {i+1}:\nFrom: {email['sender']}\nSubject: {email['subject'][:50]}\nCategory: {email['category']}"
+            f"Email {i+1}:\nFrom: {email['sender']}\nSubject: {email['subject']}\nContent: {email['content']}\nCategory: {email['category']}"
             for i, email in enumerate(emails)
         ])
         
@@ -138,6 +154,51 @@ JSON:""")
                 "deadlines": [],
                 "priorities": []
             }
+
+    async def handle_user_query(self, prompt: str) -> str:
+         # Generate a prompt to convert natural language to SQL
+        system_prompt = f"Convert the following natural language query into a SQLite query.\n\nTable emails has schemas:\n"
+        
+        columns = [
+            { "name": "id", "type": "String" },
+            { "name": "subject", "type": "String" },
+            { "name": "sender", "type": "String" },
+            { "name": "recipients", "type": "String" },
+            { "name": "content", "type": "String" },
+            { "name": "timestamp", "type": "DateTime" },
+            { "name": "category", "type": "Enum('Meetings','Important','Follow-Up','Spam')" },
+            { "name": "is_read", "type": "Boolean" },
+        ]
+        
+        system_prompt += '\n'.join([f"{col['name']} {col['type']}" for col in columns])
+
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=f"User Query: {prompt}")
+        ]
+
+        response = await self.llm.ainvoke(messages)
+        content = response.content.strip()
+        if content.__contains__('```sql'):
+            matches = re.findall(r'```sql\n(.*?)```', content, re.DOTALL)
+            if matches:
+                sql_block = matches[0].strip()
+                return sql_block
+        return ""
+        
+    async def generate_response_follow_up_email(self, prompt: str, email_data: List[Dict]) -> str:
+        email_summaries = "\n\n".join([
+            f"Email {i+1}:\nFrom: {email['sender']}\nSubject: {email['subject']}\nContent: {email['content']}\nCategory: {email['category']}"
+            for i, email in enumerate(email_data)
+        ])
+
+        messages = [
+            SystemMessage(content="You are an email assistant. Help users with these email-related queries."),
+            HumanMessage(content=f"Email Data: \n\n{email_summaries}. User Prompt: {prompt}")
+        ]
+
+        response = await self.llm.ainvoke(messages)
+        return response.content.strip()
 
     async def generate_response(self, prompt: str) -> str:
         messages = [
